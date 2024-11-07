@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feuille d'émargement</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      height: 100vh;
+      background-color: #f0f0f0;
+      padding-top: 20px;
+    }
+    h2 {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 24px;
+      text-transform: uppercase; /* Texte en majuscules */
+    }
+    /* Zone de saisie de la date */
+    #dateInput {
+      width: 80%;
+      max-width: 600px;
+      height: 40px;
+      font-size: 18px;
+      padding: 5px;
+      margin-bottom: 20px;
+    }
+    /* Zone de saisie du thème */
+    #themeInput {
+      width: 80%;
+      max-width: 600px;
+      height: 40px;
+      font-size: 18px;
+      padding: 5px;
+      margin-bottom: 20px;
+    }
+    /* Zone de saisie de l'entreprise et du nom du signataire */
+    #nameInput {
+      width: 80%;
+      max-width: 600px;
+      height: 40px;
+      font-size: 18px;
+      padding: 5px;
+      margin-bottom: 20px;
+    }
+    /* Zone de signature */
+    #signatureCanvas {
+      border: 2px solid black;
+      width: 80%;
+      max-width: 600px;
+      height: 200px;
+      background-color: white;
+      margin-top: 30px;
+    }
+    .signature-list {
+      margin-top: 30px;
+      width: 80%;
+      max-width: 600px;
+    }
+    .signature-item {
+      margin: 5px 0;
+      padding: 5px;
+      background-color: #f0f0f0;
+      border: 1px solid #ccc;
+    }
+    .signature-item .name {
+      font-weight: bold;
+    }
+    .buttons {
+      margin-top: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+  <h2>Feuille d'émargement</h2>
+
+  <!-- Saisie de la date -->
+  <input type="date" id="dateInput">
+
+  <!-- Saisie du thème -->
+  <input type="text" id="themeInput" placeholder="Entrez le thème de l'émargement">
+
+  <!-- Saisie de l'entreprise et du nom du signataire -->
+  <input type="text" id="nameInput" placeholder="Entreprise et nom du signataire">
+
+  <!-- Zone de signature -->
+  <canvas id="signatureCanvas"></canvas>
+
+  <!-- Liste des signatures -->
+  <div class="signature-list" id="signatureList"></div>
+
+  <!-- Boutons pour ajouter la signature, supprimer et sauvegarder -->
+  <div class="buttons">
+    <button id="addSignatureButton">Ajouter la signature</button>
+    <button id="removeSignatureButton" disabled>Supprimer la dernière signature</button>
+    <button id="saveButton">Sauvegarder en PDF</button>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const canvas = document.getElementById("signatureCanvas");
+      const ctx = canvas.getContext("2d");
+
+      // Ajuster la taille du canvas pour la signature
+      const canvasWidth = window.innerWidth * 0.8;
+      const canvasHeight = 200;
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+
+      let isDrawing = false;
+      let lastX = 0;
+      let lastY = 0;
+      let paths = [];
+      let signatures = []; // Liste pour garder les signatures et leurs noms
+
+      // Fonction pour dessiner sur le canvas
+      function draw(e) {
+        if (!isDrawing) return;
+
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+        ctx.strokeStyle = "#000000";
+
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(e.offsetX, e.offsetY);
+        ctx.stroke();
+
+        paths[paths.length - 1].push({ x1: lastX, y1: lastY, x2: e.offsetX, y2: e.offsetY });
+
+        lastX = e.offsetX;
+        lastY = e.offsetY;
+      }
+
+      // Démarrer un nouveau trait
+      canvas.addEventListener("mousedown", (e) => {
+        isDrawing = true;
+        lastX = e.offsetX;
+        lastY = e.offsetY;
+        paths.push([{ x1: lastX, y1: lastY, x2: lastX, y2: lastY }]);
+      });
+
+      // Dessiner lors du mouvement de la souris ou du toucher
+      canvas.addEventListener("mousemove", draw);
+
+      // Terminer le dessin
+      canvas.addEventListener("mouseup", () => {
+        isDrawing = false;
+      });
+
+      // Gestion du toucher sur écran mobile
+      canvas.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        isDrawing = true;
+        lastX = touch.offsetX;
+        lastY = touch.offsetY;
+        paths.push([{ x1: lastX, y1: lastY, x2: lastX, y2: lastY }]);
+      });
+
+      canvas.addEventListener("touchmove", (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        draw({ offsetX: touch.offsetX, offsetY: touch.offsetY });
+      });
+
+      // Terminer le dessin
+      canvas.addEventListener("touchend", () => {
+        isDrawing = false;
+      });
+
+      // Ajouter la signature à la liste
+      document.getElementById("addSignatureButton").addEventListener("click", function() {
+        const nameInput = document.getElementById("nameInput");
+        const themeInput = document.getElementById("themeInput");
+        const dateInput = document.getElementById("dateInput");
+        const name = nameInput.value.trim();
+        const theme = themeInput.value.trim();
+        const date = dateInput.value.trim();
+
+        if (!name || paths.length === 0) {
+          alert("Veuillez entrer un nom et une signature.");
+          return;
+        }
+
+        // Sauvegarder la signature et le nom dans la liste
+        const signatureItem = document.createElement("div");
+        signatureItem.classList.add("signature-item");
+
+        const nameElem = document.createElement("div");
+        nameElem.classList.add("name");
+        nameElem.textContent = name;
+
+        const signatureCanvas = document.createElement("canvas");
+        signatureCanvas.width = canvas.width;
+        signatureCanvas.height = canvas.height;
+        const signatureCtx = signatureCanvas.getContext("2d");
+        signatureCtx.lineWidth = 2;
+        signatureCtx.lineCap = "round";
+        signatureCtx.strokeStyle = "#000000";
+
+        // Re-dessiner la signature sur un nouveau canvas
+        paths.forEach(path => {
+          path.forEach(segment => {
+            signatureCtx.beginPath();
+            signatureCtx.moveTo(segment.x1, segment.y1);
+            signatureCtx.lineTo(segment.x2, segment.y2);
+            signatureCtx.stroke();
+          });
+        });
+
+        signatureItem.appendChild(nameElem);
+        signatureItem.appendChild(signatureCanvas);
+
+        document.getElementById("signatureList").appendChild(signatureItem);
+
+        // Ajouter la signature à la liste des signatures
+        signatures.push({ name: name, canvas: signatureCanvas });
+
+        // Réinitialiser la signature pour la prochaine
+        paths = [];
+        redrawCanvas();
+        nameInput.value = "";  // Réinitialiser le nom
+        document.getElementById("removeSignatureButton").disabled = false;
+      });
+
+      // Supprimer la dernière signature
+      document.getElementById("removeSignatureButton").addEventListener("click", function() {
+        if (signatures.length > 0) {
+          // Retirer le dernier élément de la liste
+          signatures.pop();
+          const lastSignatureItem = document.getElementById("signatureList").lastChild;
+          lastSignatureItem.remove();
+
+          // Désactiver le bouton si aucune signature restante
+          if (signatures.length === 0) {
+            document.getElementById("removeSignatureButton").disabled = true;
+          }
+        }
+      });
+
+      // Sauvegarder le document en PDF
+      document.getElementById("saveButton").addEventListener("click", function() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        // Ajouter du texte en haut du PDF
+        doc.setFontSize(20);
+        doc.text("FEUILLE D'ÉMARGEMENT", 105, 20, null, null, 'center');
+
+        // Ajouter la date au format DD-MM-YYYY
+        const date = document.getElementById("dateInput").value;
+        if (date) {
+          const formattedDate = formatDate(date);
+          doc.setFontSize(14);
+          doc.text("Date: " + formattedDate, 15, 40);
+        }
+
+        // Ajouter le thème
+        const theme = document.getElementById("themeInput").value;
+        if (theme) {
+          doc.setFontSize(14);
+          doc.text("Thème: " + theme, 15, 50);
+        }
+
+        // Ajouter les signatures et les noms
+        let yOffset = 60; // Début de la zone de signatures
+        signatures.forEach(signature => {
+          const name = signature.name;
+          const signatureCanvas = signature.canvas;
+
+          // Ajouter le nom
+          doc.setFontSize(12);
+          doc.text(name, 15, yOffset);
+          yOffset += 10;
+
+          // Ajouter la signature (réduite)
+          const signatureDataURL = signatureCanvas.toDataURL("image/png");
+          doc.addImage(signatureDataURL, 'PNG', 15, yOffset, 50, 20); // Signatures réduites à 50x20
+          yOffset += 30; // Espacement après chaque signature (ajusté)
+        });
+
+        // Télécharger le PDF
+        doc.save('feuille_emargement.pdf');
+      });
+
+      // Fonction pour redessiner le canvas (effacer)
+      function redrawCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+
+      // Fonction pour formater la date en DD-MM-YYYY
+      function formatDate(date) {
+        const [year, month, day] = date.split("-");
+        return `${day}-${month}-${year}`;
+      }
+    });
+  </script>
+
+</body>
+</html>
